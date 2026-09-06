@@ -420,13 +420,33 @@ class BeszelTemperatureSensor(BeszelBaseSensor):
         return f"{self.system.name} temperature" if self.system else None
     
     @property
+    def _has_temperature(self):
+        """Whether the hub actually carries a temperature for this system.
+
+        A system with no temperature sensors is reported by the agent as
+        ``dt: 0``, not as a missing field, so ``dt is not None`` is not enough
+        to prove a reading exists -- it publishes a flat 0 C / 32 F that reads
+        as healthy on a dashboard. The per-sensor map ``t`` is the honest
+        signal: it is empty exactly when there is nothing to measure. An
+        exactly-0.0 ``dt`` backed by a populated ``t`` is a real reading and
+        is kept.
+        """
+        if not self.system:
+            return False
+        temperature = self.system.info.get("dt")
+        if temperature is None:
+            return False
+        if temperature != 0:
+            return True
+        return bool((self.stats_data or {}).get("t"))
+
+    @property
     def available(self):
-        temperature = self.system.info.get("dt") if self.system else None
-        return temperature is not None
+        return self._has_temperature
 
     @property
     def native_value(self):
-        return self.system.info.get("dt") if self.system else None
+        return self.system.info.get("dt") if self._has_temperature else None
 
     @property
     def device_class(self):

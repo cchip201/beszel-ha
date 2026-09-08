@@ -33,10 +33,18 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 # Get stats for this system
                 system_stats = stats_data.get(system.id, {})
 
-                if system.info.get("dt") is not None:
+                # 1.0.4: only register a temperature sensor when the hub carries a
+                # real reading. A host with no temperature sensors reports dt: 0
+                # (not a missing field) with an empty per-sensor map t, so the
+                # 1.0.3 availability guard alone left a permanently-unavailable
+                # entity per such host (LXCs, VMs, Windows). An exactly-0.0 dt
+                # backed by a populated t is a real reading and is kept.
+                dt = system.info.get("dt")
+                if dt is not None and (dt != 0 or bool((system_stats or {}).get("t"))):
                     entities.append(BeszelTemperatureSensor(coordinator, system))
 
-                if system_stats and 'su' in system_stats:
+                # 1.0.4: same for swap - a host with no swap reports s: 0.
+                if system_stats and system_stats.get('su') is not None and (system_stats.get('s') or 0) > 0:
                     entities.append(BeszelSWAPSensor(coordinator, system))
 
                 if system_stats and 'g' in system_stats:

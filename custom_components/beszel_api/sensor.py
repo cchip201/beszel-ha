@@ -450,7 +450,10 @@ class BeszelTemperatureSensor(BeszelBaseSensor):
 
     @property
     def available(self):
-        return self._has_temperature
+        if not super().available:
+            return False
+        temperature = self.system.info.get("dt") if self.system else None
+        return temperature is not None and self._has_temperature
 
     @property
     def native_value(self):

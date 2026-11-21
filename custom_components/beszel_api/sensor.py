@@ -33,10 +33,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 # Get stats for this system
                 system_stats = stats_data.get(system.id, {})
 
-                if system.info.get("dt") is not None:
+                if _has_temperature(system, system_stats):
                     entities.append(BeszelTemperatureSensor(coordinator, system))
 
-                if system_stats and 'su' in system_stats:
+                if system_stats and 'su' in system_stats and (system_stats.get('s') or 0) > 0:
                     entities.append(BeszelSWAPSensor(coordinator, system))
 
                 if system_stats and 'g' in system_stats:
@@ -63,6 +63,21 @@ async def async_setup_entry(hass, entry, async_add_entities):
     except Exception as e:
         LOGGER.error(f"Failed to setup sensors: {e}")
         raise
+
+def _has_temperature(system, stats_data):
+    """Whether the hub reports a real temperature for this system.
+
+    A system without temperature sensors can still carry dt: 0, for example a
+    paused system with an all-zero info record, or a hub that stores
+    zero-valued fields. That would show as a real 0 °C. In that case the
+    per-sensor map "t" is empty, so a zero only counts as a reading when "t"
+    has entries.
+    """
+    temperature = system.info.get("dt") if system else None
+    if temperature is None:
+        return False
+    return temperature != 0 or bool((stats_data or {}).get("t"))
+
 
 class BeszelBaseSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, system):
@@ -433,8 +448,7 @@ class BeszelTemperatureSensor(BeszelBaseSensor):
     def available(self):
         if not super().available:
             return False
-        temperature = self.system.info.get("dt") if self.system else None
-        return temperature is not None
+        return _has_temperature(self.system, self.stats_data)
 
     @property
     def native_value(self):
